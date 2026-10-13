@@ -1,9 +1,12 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8">
 <title>PLEX+ Hub</title>
-<!-- Eigener Cast-Receiver für das "Wohnzimmer Display" (Nest Hub Max). Enthält keine Daten und keine Schlüssel:
-     Titel, Cover und Dauer schickt Kinoregal beim Casten mit. Gespielt wird ein stilles Audio so lang wie der Film,
-     so laufen Pause, Weiter und Spulen mit, und der Hub bleibt wach. -->
+<!-- Eigener Cast-Receiver für das "Wohnzimmer Display" (Nest Hub Max). Enthält keine Daten und keine Schlüssel.
+     Zwei Wege, gleiche Anzeige:
+     1. TV-App (PLEX+ am Fernseher, ohne PC): Nachrichten im Namespace urn:x-cast:de.rkorr.plexplus,
+        {"typ":"zeige","titel","untertitel","cover","dauer","position","spielt"} bzw. {"typ":"aus"}.
+        Die Zeit zwischen den Meldungen rechnet die Seite selbst weiter.
+     2. PLEX+ am PC: Medien-LOAD mit stillem Audio so lang wie der Film und Titel, Cover und Dauer in den Metadaten. -->
 <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,300..700&display=swap" rel="stylesheet">
@@ -68,16 +71,17 @@ const uhrzeit = d => `${zwei(d.getHours())}:${zwei(d.getMinutes())}`;
 const ctx = cast.framework.CastReceiverContext.getInstance();
 const pm = ctx.getPlayerManager();
 pm.setMediaElement($('ton'));
+const NS = 'urn:x-cast:de.rkorr.plexplus';
+const S = cast.framework.messages.PlayerState;
 let dauer = 0, geladen = false;
+// tv: Anzeige direkt von der TV-App (eigener Namespace), sonst Medien-LOAD von PLEX+ am PC
+let tv = null, endeTimer = 0, senderWegTimer = 0;
 
-function zeigeTitel(media) {
-  const md = (media && media.metadata) || {}, cd = (media && media.customData) || {};
-  dauer = +cd.dauer || Math.max(0, (media && media.duration || 0) - 60);
-  $('t').textContent = md.title || '';
-  $('s').textContent = md.subtitle || '';
-  const bild = (md.images && md.images[0] && md.images[0].url) || '';
+function zeigeTitel(titel, untertitel, bild) {
+  $('t').textContent = titel || '';
+  $('s').textContent = untertitel || '';
   $('w').classList.toggle('ohne-cover', !bild);
-  if (bild) {
+  if (bild && $('c').getAttribute('src') !== bild) {
     $('c').src = bild;
     $('g').style.backgroundImage = `url("${bild}")`;
   }
@@ -86,20 +90,39 @@ function zeigeTitel(media) {
   $('w').classList.add('da');
 }
 
-let leerSeit = 0;
-function tick() {
-  const jetzt = new Date();
-  $('uhr').textContent = uhrzeit(jetzt);
-  if (!geladen || !dauer) return;
-  if (pm.getPlayerState() === cast.framework.messages.PlayerState.IDLE) {   // gestoppt: Anzeige ausblenden
-    if (!leerSeit) leerSeit = Date.now();
-    if (Date.now() - leerSeit > 5000) $('w').classList.remove('da');
-    return;
-  }
-  leerSeit = 0;
-  $('w').classList.add('da');
-  const pos = Math.min(dauer, pm.getCurrentTimeSec() || 0);
-  const pause = pm.getPlayerState() === cast.framework.messages.PlayerState.PAUSED;
+function zeigeMedia(media) {
+  const md = (media && media.metadata) || {}, cd = (media && media.customData) || {};
+  tv = null;
+  clearTimeout(endeTimer);
+  dauer = +cd.dauer || Math.max(0, (media && media.duration || 0) - 60);
+  zeigeTitel(md.title, md.subtitle, (md.images && md.images[0] && md.images[0].url) || '');
+}
+
+// Nach dem Ende der TV-Anzeige den Hub nach 3 min freigeben, falls die TV-App das nicht mehr kann (Strom weg)
+function planeEnde() {
+  clearTimeout(endeTimer);
+  endeTimer = setTimeout(() => { if (!tv && pm.getPlayerState() === S.IDLE) ctx.stop(); }, 3 * 60000);
+}
+
+function tvAus() {
+  tv = null;
+  geladen = false;
+  $('w').classList.remove('da');
+  planeEnde();
+}
+
+function tvNachricht(m) {
+  if (!m || m.typ === 'aus') return tvAus();
+  if (m.typ !== 'zeige') return;
+  clearTimeout(endeTimer);
+  clearTimeout(senderWegTimer);
+  tv = { position: +m.position || 0, spielt: !!m.spielt, seit: Date.now() };
+  dauer = +m.dauer || 0;
+  zeigeTitel(m.titel, m.untertitel, m.cover || '');
+}
+
+function zeichne(pos, pause, jetzt) {
+  pos = Math.min(dauer, Math.max(0, pos));
   const pct = pos / dauer * 100;
   $('f').style.width = pct + '%';
   $('d').style.left = pct + '%';
@@ -110,13 +133,47 @@ function tick() {
   $('w').classList.toggle('pause', pause);
 }
 
-pm.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, req => { zeigeTitel(req.media); return req; });
-pm.addEventListener(cast.framework.events.EventType.MEDIA_FINISHED, () => { geladen = false; $('w').classList.remove('da'); });
+let leerSeit = 0;
+function tick() {
+  const jetzt = new Date();
+  $('uhr').textContent = uhrzeit(jetzt);
+  if (tv) {
+    // Die TV-App meldet sich beim Abspielen alle 15 s; bleibt das aus, ist sie weg. Pause gilt höchstens 30 min.
+    const still = Date.now() - tv.seit;
+    if (still > (tv.spielt ? 120000 : 31 * 60000)) return tvAus();
+    const pos = tv.position + (tv.spielt ? still / 1000 : 0);
+    if (dauer && tv.spielt && pos > dauer + 60) return tvAus();
+    $('w').classList.add('da');
+    if (dauer) zeichne(pos, !tv.spielt, jetzt);
+    return;
+  }
+  if (!geladen || !dauer) return;
+  if (pm.getPlayerState() === S.IDLE) {   // gestoppt: Anzeige ausblenden
+    if (!leerSeit) leerSeit = Date.now();
+    if (Date.now() - leerSeit > 5000) $('w').classList.remove('da');
+    return;
+  }
+  leerSeit = 0;
+  $('w').classList.add('da');
+  zeichne(pm.getCurrentTimeSec() || 0, pm.getPlayerState() === S.PAUSED, jetzt);
+}
+
+pm.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, req => { zeigeMedia(req.media); return req; });
+pm.addEventListener(cast.framework.events.EventType.MEDIA_FINISHED, () => { if (!tv) { geladen = false; $('w').classList.remove('da'); } });
+ctx.addCustomMessageListener(NS, e => tvNachricht(typeof e.data === 'string' ? JSON.parse(e.data) : e.data));
+// TV-App weg (WLAN, Fernseher aus): nach 60 s ohne neue Meldung ausblenden
+ctx.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, () => {
+  if (!tv || ctx.getSenders().length) return;
+  clearTimeout(senderWegTimer);
+  const seit = tv.seit;
+  senderWegTimer = setTimeout(() => { if (tv && tv.seit === seit) tvAus(); }, 60000);
+});
 setInterval(tick, 1000);
 tick();
 
 const opt = new cast.framework.CastReceiverOptions();
-opt.disableIdleTimeout = true;      // Anzeige bleibt, solange der Film läuft; Kinoregal beendet sie selbst
+opt.disableIdleTimeout = true;      // Anzeige bleibt, solange der Film läuft; PLEX+ beendet sie selbst
+opt.customNamespaces = { [NS]: cast.framework.system.MessageType.JSON };
 opt.skipPlayersLoad = false;
 opt.touchScreenOptimizedApp = true; // keine Google-Touchsteuerung über der Anzeige (Nest Hub)
 ctx.start(opt);
