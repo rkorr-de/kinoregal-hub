@@ -85,10 +85,18 @@ function zeigeTitel(media) {
   $('w').classList.add('da');
 }
 
+let leerSeit = 0;
 function tick() {
   const jetzt = new Date();
   $('uhr').textContent = uhrzeit(jetzt);
   if (!geladen || !dauer) return;
+  if (pm.getPlayerState() === cast.framework.messages.PlayerState.IDLE) {   // gestoppt: Anzeige ausblenden
+    if (!leerSeit) leerSeit = Date.now();
+    if (Date.now() - leerSeit > 5000) $('w').classList.remove('da');
+    return;
+  }
+  leerSeit = 0;
+  $('w').classList.add('da');
   const pos = Math.min(dauer, pm.getCurrentTimeSec() || 0);
   const pause = pm.getPlayerState() === cast.framework.messages.PlayerState.PAUSED;
   const pct = pos / dauer * 100;
