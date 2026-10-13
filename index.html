@@ -41,6 +41,7 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .pause .fill{opacity:.55}
 .pause .dot{background:var(--dim);box-shadow:none}
 audio{display:none}
+touch-controls{display:none !important}
 </style></head>
 <body>
 <audio id="ton"></audio>
@@ -117,6 +118,7 @@ tick();
 const opt = new cast.framework.CastReceiverOptions();
 opt.disableIdleTimeout = true;      // Anzeige bleibt, solange der Film läuft; Kinoregal beendet sie selbst
 opt.skipPlayersLoad = false;
+opt.touchScreenOptimizedApp = true; // keine Google-Touchsteuerung über der Anzeige (Nest Hub)
 ctx.start(opt);
 </script>
 </body></html>
