@@ -6,6 +6,8 @@
      1. TV-App (PLEX+ am Fernseher, ohne PC): Nachrichten im Namespace urn:x-cast:de.rkorr.plexplus,
         {"typ":"zeige","titel","untertitel","cover","dauer","position","spielt"} bzw. {"typ":"aus"}.
         Die Zeit zwischen den Meldungen rechnet die Seite selbst weiter.
+        Musik: {"typ":"musik","sender","live","titel","interpret","album","jahr","sendung","ausgabe","seit_s",
+        "cover","senderbild","senderfarbe"}; Bilder nur https oder data:, leere Felder fallen weg.
      2. PLEX+ am PC: Medien-LOAD mit stillem Audio so lang wie der Film und Titel, Cover und Dauer in den Metadaten. -->
 <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -43,6 +45,32 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .end{text-align:right}
 .pause .fill{opacity:.55}
 .pause .dot{background:var(--dim);box-shadow:none}
+/* Musik: Cover mit Spiegelung links, Uhr und Titel rechts */
+.musik{grid-template-columns:36vw 1fr;gap:5.3vw;padding:7vh 6vw 4.5vh 6.1vw}
+.mcover{position:relative;width:36vw;aspect-ratio:1;align-self:center;margin-top:-7.5vh;border-radius:2vh;
+  -webkit-box-reflect:below 1vh linear-gradient(transparent 62%,rgba(255,255,255,.22))}
+.mcover .glow{position:absolute;inset:-5%;background:center/cover;filter:blur(44px) saturate(1.2);opacity:.3;border-radius:3vh}
+.mcover img,.mcover .karte{position:relative;width:100%;height:100%;object-fit:cover;border-radius:2vh;display:block;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06),0 2vh 6vh rgba(0,0,0,.8)}
+.mcover .karte{display:flex;flex-direction:column;justify-content:flex-end;padding:0 0 3.6vh 2.85vw;
+  background:linear-gradient(180deg,var(--sf,#2b4a9a),#1a1a24);overflow:hidden}
+.karte .kn{font-size:3.8vh;font-weight:700;letter-spacing:.005em;text-transform:uppercase;line-height:1.1}
+.karte .ks{font-size:2.6vh;font-weight:400;opacity:.85;margin-top:.3vh}
+.mcover.mit-bild .karte,.mcover.ohne-bild img{display:none}
+.musik .clock{font-size:22vh;margin-top:1vh}
+.musik .label{letter-spacing:.1em;font-weight:700}
+.mrow .end{margin-left:auto}
+.punkt{display:inline-block;width:1.4vh;height:1.4vh;border-radius:50%;background:#e8483b;margin-right:1vh;vertical-align:.05em;
+  box-shadow:0 0 1vh rgba(232,72,59,.6)}
+.mtitel{font-size:5.4vh;font-weight:500;line-height:1.12;margin-top:1.4vh;letter-spacing:-.005em;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mint{font-size:4vh;font-weight:300;margin-top:.6vh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.malb{font-size:2.6vh;color:var(--dim);margin-top:.8vh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mlinie{height:1px;background:#2a2926;margin-top:4vh}
+.mrow{display:flex;justify-content:space-between;align-items:flex-end;margin-top:3vh}
+.mv{font-size:4vh;font-weight:300;margin-top:.5vh;white-space:nowrap}
+.msend{font-size:2.6vh;color:var(--dim);margin-top:5vh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mint:empty,.malb:empty,.msend:empty,.mrow .leer{display:none}
 audio{display:none}
 touch-controls{display:none !important}
 </style></head>
@@ -64,6 +92,25 @@ touch-controls{display:none !important}
     </div>
   </div>
 </div>
+<div class="wrap musik" id="m">
+  <div class="mcover ohne-bild" id="mc"><div class="glow" id="mg"></div><img id="mi" alt="">
+    <div class="karte" id="mk"><div class="kn" id="mkn"></div><div class="ks" id="mks"></div></div></div>
+  <div class="info">
+    <div class="clock" id="muhr"></div>
+    <div class="mid">
+      <div class="label" id="mlab"></div>
+      <div class="mtitel" id="mt"></div>
+      <div class="mint" id="mn"></div>
+      <div class="malb" id="ma"></div>
+      <div class="mlinie"></div>
+      <div class="mrow">
+        <div id="mausw"><div class="label">Ausgabe</div><div class="mv" id="mau"></div></div>
+        <div class="end" id="mseitw"><div class="label">Seit</div><div class="mv" id="mse"></div></div>
+      </div>
+      <div class="msend" id="msd"></div>
+    </div>
+  </div>
+</div>
 <script>
 const $ = id => document.getElementById(id);
 const zwei = n => String(n).padStart(2, '0');
@@ -76,8 +123,11 @@ const S = cast.framework.messages.PlayerState;
 let dauer = 0, geladen = false;
 // tv: Anzeige direkt von der TV-App (eigener Namespace), sonst Medien-LOAD von PLEX+ am PC
 let tv = null, endeTimer = 0, senderWegTimer = 0;
+// musik: Musikansicht (Radio/Musik aus der TV-App), {seit, empfangen}
+let musik = null;
 
 function zeigeTitel(titel, untertitel, bild) {
+  musikWeg();
   $('t').textContent = titel || '';
   $('s').textContent = untertitel || '';
   $('w').classList.toggle('ohne-cover', !bild);
@@ -101,7 +151,7 @@ function zeigeMedia(media) {
 // Nach dem Ende der TV-Anzeige den Hub nach 3 min freigeben, falls die TV-App das nicht mehr kann (Strom weg)
 function planeEnde() {
   clearTimeout(endeTimer);
-  endeTimer = setTimeout(() => { if (!tv && pm.getPlayerState() === S.IDLE) ctx.stop(); }, 3 * 60000);
+  endeTimer = setTimeout(() => { if (!tv && !musik && pm.getPlayerState() === S.IDLE) ctx.stop(); }, 3 * 60000);
 }
 
 function tvAus() {
@@ -111,8 +161,60 @@ function tvAus() {
   planeEnde();
 }
 
+function musikWeg() {
+  musik = null;
+  $('m').classList.remove('da');
+}
+
+function setzeBild(img, glow, url) {
+  if (img.getAttribute('src') !== url) img.src = url;
+  glow.style.backgroundImage = `url("${url}")`;
+}
+
+// Musik: Sender, Titel, Interpret, Album · Jahr, Ausgabe, seit wann, Sendung; leere Felder fallen weg
+function zeigeMusik(m) {
+  tv = null;
+  geladen = false;
+  $('w').classList.remove('da');
+  clearTimeout(endeTimer);
+  clearTimeout(senderWegTimer);
+  musik = { seit: +m.seit_s || 0, empfangen: Date.now() };
+  const lab = $('mlab');
+  lab.textContent = '';
+  if (m.live) {
+    const p = document.createElement('span');
+    p.className = 'punkt';
+    lab.append(p, 'Live' + (m.sender ? ' · ' : ''));
+  }
+  lab.append(m.sender || '');
+  $('mt').textContent = m.titel || m.sendung || m.sender || '';
+  $('mn').textContent = m.interpret || '';
+  $('ma').textContent = [m.album, +m.jahr > 0 ? m.jahr : ''].filter(Boolean).join('  ·  ');
+  $('mau').textContent = m.ausgabe || '';
+  $('mausw').classList.toggle('leer', !m.ausgabe);
+  $('msd').textContent = m.titel && m.sendung ? m.sendung : '';
+  const bild = m.cover || m.senderbild || '', mc = $('mc');
+  mc.classList.toggle('mit-bild', !!bild);
+  mc.classList.toggle('ohne-bild', !bild);
+  if (bild) setzeBild($('mi'), $('mg'), bild);
+  else $('mg').style.backgroundImage = '';
+  $('mi').onerror = () => { mc.classList.remove('mit-bild'); mc.classList.add('ohne-bild'); $('mg').style.backgroundImage = ''; };
+  mc.style.setProperty('--sf', /^#[0-9a-f]{3,8}$/i.test(m.senderfarbe || '') ? m.senderfarbe : '#2b4a9a');
+  $('mkn').textContent = m.sender || '';
+  $('mks').textContent = m.sendung || '';
+  $('m').classList.add('da');
+  zeichneMusik();
+}
+
+function zeichneMusik() {
+  const min = Math.max(1, Math.floor((musik.seit + (Date.now() - musik.empfangen) / 1000) / 60)), h = Math.floor(min / 60);
+  $('mse').textContent = h ? `${h}:${zwei(min % 60)} Std.` : `${min} Min.`;
+}
+
 function tvNachricht(m) {
-  if (!m || m.typ === 'aus') return tvAus();
+  if (!m || m.typ === 'aus') { musikWeg(); return tvAus(); }
+  if (m.typ === 'musik') return zeigeMusik(m);
+  if (m.typ !== 'zeige') return;
   if (m.typ !== 'zeige') return;
   clearTimeout(endeTimer);
   clearTimeout(senderWegTimer);
@@ -136,7 +238,12 @@ function zeichne(pos, pause, jetzt) {
 let leerSeit = 0;
 function tick() {
   const jetzt = new Date();
-  $('uhr').textContent = uhrzeit(jetzt);
+  $('uhr').textContent = $('muhr').textContent = uhrzeit(jetzt);
+  if (musik) {
+    // Die TV-App meldet sich bei jedem Titelwechsel und alle 5 min; 12 min Stille = weg
+    if (Date.now() - musik.empfangen > 12 * 60000) { musikWeg(); return tvAus(); }
+    return zeichneMusik();
+  }
   if (tv) {
     // Die TV-App meldet sich beim Abspielen alle 15 s; bleibt das aus, ist sie weg. Pause gilt höchstens 30 min.
     const still = Date.now() - tv.seit;
@@ -163,10 +270,13 @@ pm.addEventListener(cast.framework.events.EventType.MEDIA_FINISHED, () => { if (
 ctx.addCustomMessageListener(NS, e => tvNachricht(typeof e.data === 'string' ? JSON.parse(e.data) : e.data));
 // TV-App weg (WLAN, Fernseher aus): nach 60 s ohne neue Meldung ausblenden
 ctx.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, () => {
-  if (!tv || ctx.getSenders().length) return;
+  if ((!tv && !musik) || ctx.getSenders().length) return;
   clearTimeout(senderWegTimer);
-  const seit = tv.seit;
-  senderWegTimer = setTimeout(() => { if (tv && tv.seit === seit) tvAus(); }, 60000);
+  const seit = tv ? tv.seit : musik.empfangen;
+  senderWegTimer = setTimeout(() => {
+    if (tv && tv.seit === seit) tvAus();
+    if (musik && musik.empfangen === seit) { musikWeg(); tvAus(); }
+  }, 60000);
 });
 setInterval(tick, 1000);
 tick();
