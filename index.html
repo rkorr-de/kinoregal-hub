@@ -6,9 +6,10 @@
      1. TV-App (PLEX+ am Fernseher, ohne PC): Nachrichten im Namespace urn:x-cast:de.rkorr.plexplus,
         {"typ":"zeige","titel","untertitel","cover","dauer","position","spielt"} bzw. {"typ":"aus"}.
         Die Zeit zwischen den Meldungen rechnet die Seite selbst weiter.
-        Musik (TV-App ab 0.10.1, jede Minute und bei jedem Titelwechsel): {"typ":"musik","sender","titel","kuenstler",
-        "album","jahr","cover","ausgabe","sendung","gestartet" (Unixzeit ms),"spielt"}; wahlweise "senderbild",
-        "senderfarbe", "live", "seit_s". Bilder nur https oder data:, leere Felder fallen weg, 3 min Stille = aus.
+        Musik (TV-App, bei jeder Änderung und alle 5 min): {"typ":"musik","sender","live" (false = pausiert),"titel",
+        "interpret","album","jahr","sendung","ausgabe","seit_s","cover","senderfarbe"}, wahlweise "senderbild";
+        ältere Form mit "kuenstler","gestartet" (Unixzeit ms),"spielt" geht auch. Bilder nur https oder data:,
+        leere Felder fallen weg, 12 min Stille = aus.
      2. PLEX+ am PC: Medien-LOAD mit stillem Audio so lang wie der Film und Titel, Cover und Dauer in den Metadaten. -->
 <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -183,10 +184,11 @@ function zeigeMusik(m) {
   // Hörzeit: gestartet (Unixzeit ms, TV-App 0.10.1) oder seit_s; danach zählt die Seite selbst weiter
   const seit = m.seit_s != null ? +m.seit_s : +m.gestartet > 0 ? Math.max(0, (Date.now() - m.gestartet) / 1000) : 0;
   musik = { seit, empfangen: Date.now() };
-  const spielt = m.spielt !== false, live = m.live != null ? !!m.live : true;
+  // live:false oder spielt:false = pausiert
+  const spielt = m.spielt != null ? m.spielt !== false : m.live !== false;
   const lab = $('mlab');
   lab.textContent = '';
-  if (live || !spielt) {
+  {
     const p = document.createElement('span');
     p.className = 'punkt' + (spielt ? '' : ' aus');
     lab.append(p, (spielt ? 'Live' : 'Pausiert') + (m.sender ? ' · ' : ''));
@@ -256,8 +258,8 @@ function tick() {
   $('uhr').textContent = uhrzeit(jetzt);
   if ($('muhr').textContent !== uhrzeit(jetzt)) { $('muhr').textContent = uhrzeit(jetzt); uhrBreite(); }
   if (musik) {
-    // Die TV-App meldet sich bei jedem Titelwechsel und jede Minute; 3 min Stille = weg
-    if (Date.now() - musik.empfangen > 3 * 60000) { musikWeg(); return tvAus(); }
+    // Die TV-App meldet sich bei jeder Änderung und alle 5 min; 12 min Stille = weg
+    if (Date.now() - musik.empfangen > 12 * 60000) { musikWeg(); return tvAus(); }
     return zeichneMusik();
   }
   if (tv) {
