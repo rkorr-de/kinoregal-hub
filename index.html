@@ -57,7 +57,7 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .karte .kn{font-size:3.8vh;font-weight:700;letter-spacing:.005em;text-transform:uppercase;line-height:1.1}
 .karte .ks{font-size:2.6vh;font-weight:400;opacity:.85;margin-top:.3vh}
 .mcover.mit-bild .karte,.mcover.ohne-bild img{display:none}
-.musik .clock{font-size:22vh;margin-top:1vh}
+.musik .clock{font-size:22vh;margin:1vh 0 0;text-align:center;white-space:nowrap;letter-spacing:-.02em}
 .musik .label{letter-spacing:.1em;font-weight:700}
 .mrow .end{margin-left:auto}
 .punkt{display:inline-block;width:1.4vh;height:1.4vh;border-radius:50%;background:#e8483b;margin-right:1vh;vertical-align:.05em;
@@ -203,7 +203,17 @@ function zeigeMusik(m) {
   $('mkn').textContent = m.sender || '';
   $('mks').textContent = m.sendung || '';
   $('m').classList.add('da');
+  uhrBreite();
   zeichneMusik();
+}
+
+// Musik-Uhr so breit wie der graue Strich darunter, zentriert
+function uhrBreite() {
+  const u = $('muhr'), soll = $('m').querySelector('.mlinie').getBoundingClientRect().width;
+  if (!soll) return;
+  u.style.fontSize = '';
+  const ist = u.scrollWidth && (() => { const r = document.createRange(); r.selectNodeContents(u); return r.getBoundingClientRect().width; })();
+  if (ist) u.style.fontSize = (parseFloat(getComputedStyle(u).fontSize) * soll / ist) + 'px';
 }
 
 function zeichneMusik() {
@@ -238,7 +248,8 @@ function zeichne(pos, pause, jetzt) {
 let leerSeit = 0;
 function tick() {
   const jetzt = new Date();
-  $('uhr').textContent = $('muhr').textContent = uhrzeit(jetzt);
+  $('uhr').textContent = uhrzeit(jetzt);
+  if ($('muhr').textContent !== uhrzeit(jetzt)) { $('muhr').textContent = uhrzeit(jetzt); uhrBreite(); }
   if (musik) {
     // Die TV-App meldet sich bei jedem Titelwechsel und alle 5 min; 12 min Stille = weg
     if (Date.now() - musik.empfangen > 12 * 60000) { musikWeg(); return tvAus(); }
