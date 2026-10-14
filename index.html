@@ -152,9 +152,10 @@ function zeigeMedia(media) {
 }
 
 // Nach dem Ende der TV-Anzeige den Hub nach 3 min freigeben, falls die TV-App das nicht mehr kann (Strom weg)
-function planeEnde() {
+// Auch direkt nach dem Start: kommt nie eine Meldung, bleibt die Seite nicht schwarz stehen, sondern gibt nach 1 min frei
+function planeEnde(ms) {
   clearTimeout(endeTimer);
-  endeTimer = setTimeout(() => { if (!tv && !musik && pm.getPlayerState() === S.IDLE) ctx.stop(); }, 3 * 60000);
+  endeTimer = setTimeout(() => { if (!tv && !musik && !geladen && pm.getPlayerState() === S.IDLE) ctx.stop(); }, ms || 3 * 60000);
 }
 
 function tvAus() {
@@ -287,13 +288,13 @@ pm.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, req => { zeig
 pm.addEventListener(cast.framework.events.EventType.MEDIA_FINISHED, () => { if (!tv) { geladen = false; $('w').classList.remove('da'); } });
 ctx.addCustomMessageListener(NS, e => tvNachricht(typeof e.data === 'string' ? JSON.parse(e.data) : e.data));
 // TV-App weg (WLAN, Fernseher aus): nach 60 s ohne neue Meldung ausblenden
+// Musik läuft am Lautsprecher weiter, auch wenn die Leitung zur TV-App kurz weg ist: dort gilt nur die 12-min-Grenze
 ctx.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, () => {
-  if ((!tv && !musik) || ctx.getSenders().length) return;
+  if (!tv || ctx.getSenders().length) return;
   clearTimeout(senderWegTimer);
-  const seit = tv ? tv.seit : musik.empfangen;
+  const seit = tv.seit;
   senderWegTimer = setTimeout(() => {
     if (tv && tv.seit === seit) tvAus();
-    if (musik && musik.empfangen === seit) { musikWeg(); tvAus(); }
   }, 60000);
 });
 setInterval(tick, 1000);
@@ -305,5 +306,6 @@ opt.customNamespaces = { [NS]: cast.framework.system.MessageType.JSON };
 opt.skipPlayersLoad = false;
 opt.touchScreenOptimizedApp = true; // keine Google-Touchsteuerung über der Anzeige (Nest Hub)
 ctx.start(opt);
+planeEnde(60000);
 </script>
 </body></html>
