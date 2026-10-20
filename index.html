@@ -10,6 +10,8 @@
         "interpret","album","jahr","sendung","ausgabe","seit_s","cover","senderfarbe"}, wahlweise "senderbild";
         ältere Form mit "kuenstler","gestartet" (Unixzeit ms),"spielt" geht auch. Bilder nur https oder data:,
         leere Felder fallen weg, 12 min Stille = aus.
+        Kamera-Alarm (TV-App, Nest-Kameras): {"typ":"kamera","titel","art","zeit","bild"} blendet das Bild (nur https oder
+        data:) 30 s über alles andere ein, {"typ":"kamera_aus"} nimmt es sofort weg; Film- und Musikanzeige darunter laufen weiter.
      2. PLEX+ am PC: Medien-LOAD mit stillem Audio so lang wie der Film und Titel, Cover und Dauer in den Metadaten. -->
 <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -74,6 +76,12 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .mv{font-size:4vh;font-weight:300;margin-top:.5vh;white-space:nowrap}
 .msend{font-size:2.6vh;color:var(--dim);margin-top:5vh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mint:empty,.malb:empty,.msend:empty,.mrow .leer{display:none}
+/* Kamera-Alarm: Vollbild über allem, 30 s */
+.kam{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .6s ease;pointer-events:none;z-index:5}
+.kam.da{opacity:1}
+.kam img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.kam .leiste{position:absolute;left:0;right:0;bottom:0;padding:9vh 6vw 6vh;background:linear-gradient(transparent,rgba(0,0,0,.88))}
+.kam .titel{font-size:6.4vh;font-weight:500;line-height:1.1;margin-top:1vh;letter-spacing:-.01em}
 audio{display:none}
 touch-controls{display:none !important}
 </style></head>
@@ -114,6 +122,8 @@ touch-controls{display:none !important}
     </div>
   </div>
 </div>
+<div class="kam" id="k"><img id="ki" alt="">
+  <div class="leiste"><div class="label" id="kl"></div><div class="titel" id="kt"></div></div></div>
 <script>
 const $ = id => document.getElementById(id);
 const zwei = n => String(n).padStart(2, '0');
@@ -128,6 +138,8 @@ let dauer = 0, geladen = false;
 let tv = null, endeTimer = 0, senderWegTimer = 0;
 // musik: Musikansicht (Radio/Musik aus der TV-App), {seit, empfangen}
 let musik = null;
+// kam: Kamera-Alarm sichtbar (die Seite gibt den Hub dann nicht frei)
+let kam = false, kamTimer = 0;
 
 function zeigeTitel(titel, untertitel, bild) {
   musikWeg();
@@ -155,7 +167,7 @@ function zeigeMedia(media) {
 // Auch direkt nach dem Start: kommt nie eine Meldung, bleibt die Seite nicht schwarz stehen, sondern gibt nach 1 min frei
 function planeEnde(ms) {
   clearTimeout(endeTimer);
-  endeTimer = setTimeout(() => { if (!tv && !musik && !geladen && pm.getPlayerState() === S.IDLE) ctx.stop(); }, ms || 3 * 60000);
+  endeTimer = setTimeout(() => { if (!tv && !musik && !kam && !geladen && pm.getPlayerState() === S.IDLE) ctx.stop(); }, ms || 3 * 60000);
 }
 
 function tvAus() {
@@ -229,7 +241,30 @@ function zeichneMusik() {
   $('mse').textContent = h ? `${h}:${zwei(min % 60)} Std.` : `${min} Min.`;
 }
 
+// Kamera-Alarm: Standbild (data: oder https) mit Name, Art und Uhrzeit, 30 s lang
+function zeigeKamera(m) {
+  const bild = String(m.bild || '');
+  if (!/^(data:image\/|https:\/\/)/.test(bild)) return;
+  $('ki').src = bild;
+  $('kl').textContent = [m.art || 'Kamera', m.zeit].filter(Boolean).join('  ·  ');
+  $('kt').textContent = m.titel || '';
+  kam = true;
+  clearTimeout(endeTimer);
+  clearTimeout(kamTimer);
+  $('k').classList.add('da');
+  kamTimer = setTimeout(kameraWeg, 30000);
+}
+
+function kameraWeg() {
+  clearTimeout(kamTimer);
+  kam = false;
+  $('k').classList.remove('da');
+  if (!tv && !musik && !geladen) planeEnde(60000);
+}
+
 function tvNachricht(m) {
+  if (m && m.typ === 'kamera') return zeigeKamera(m);
+  if (m && m.typ === 'kamera_aus') return kameraWeg();
   if (!m || m.typ === 'aus') { musikWeg(); return tvAus(); }
   if (m.typ === 'musik') return zeigeMusik(m);
   if (m.typ !== 'zeige') return;
