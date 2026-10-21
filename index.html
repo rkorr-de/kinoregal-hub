@@ -288,9 +288,37 @@ function zeichne(pos, pause, jetzt) {
   $('w').classList.toggle('pause', pause);
 }
 
+// Ruhe-Schutz (Rolf 2026-10-21): ohne laufende Wiedergabe gilt der Receiver als untätig und der Nest Hub legt nach
+// kurzer Zeit seinen Bildschirmschoner (große Uhr) darüber. Solange die Seite etwas von der TV-App zeigt (Film, auch
+// pausiert, Musik, Kamera), spielt sie deshalb selbst stilles Audio (stille.mp3, 10 min, dann von vorn). PLEX+ am PC
+// lädt sein eigenes stilles Audio, das hat Vorrang; nach dem Ende wird gestoppt, damit der Hub frei werden kann.
+const RUHE = new URL('stille.mp3', location.href).href;
+let ruheLaedt = false, ruhePauseBis = 0;
+const istRuhe = () => { const mi = pm.getMediaInformation && pm.getMediaInformation(); return !!(mi && mi.customData && mi.customData.ruhe); };
+function ruheSchutz(an) {
+  const st = pm.getPlayerState();
+  if (!an) {
+    if (st !== S.IDLE && istRuhe()) pm.stop();
+    return;
+  }
+  if (st === S.PAUSED && istRuhe()) return pm.play();  // z. B. per Touch/Sprache angehalten: stilles Audio läuft weiter
+  if (st !== S.IDLE || ruheLaedt || Date.now() < ruhePauseBis) return;
+  const M = cast.framework.messages, r = new M.LoadRequestData();
+  r.media = new M.MediaInformation();
+  r.media.contentId = r.media.contentUrl = RUHE;
+  r.media.contentType = 'audio/mpeg';
+  r.media.streamType = M.StreamType.BUFFERED;
+  r.media.customData = { ruhe: true };
+  r.autoplay = true;
+  ruheLaedt = true;
+  Promise.resolve(pm.load(r)).catch(e => { console.warn('Ruhe-Schutz:', e); ruhePauseBis = Date.now() + 30000; })
+    .then(() => { ruheLaedt = false; });
+}
+
 let leerSeit = 0;
 function tick() {
   const jetzt = new Date();
+  ruheSchutz(!!(tv || musik || kam));
   $('uhr').textContent = uhrzeit(jetzt);
   if ($('muhr').textContent !== uhrzeit(jetzt)) { $('muhr').textContent = uhrzeit(jetzt); uhrBreite(); }
   if (musik) {
@@ -319,7 +347,10 @@ function tick() {
   zeichne(pm.getCurrentTimeSec() || 0, pm.getPlayerState() === S.PAUSED, jetzt);
 }
 
-pm.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, req => { zeigeMedia(req.media); return req; });
+pm.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, req => {
+  if (!(req.media && req.media.customData && req.media.customData.ruhe)) zeigeMedia(req.media);  // stilles Audio der Seite selbst: nichts anzeigen
+  return req;
+});
 pm.addEventListener(cast.framework.events.EventType.MEDIA_FINISHED, () => { if (!tv) { geladen = false; $('w').classList.remove('da'); } });
 ctx.addCustomMessageListener(NS, e => tvNachricht(typeof e.data === 'string' ? JSON.parse(e.data) : e.data));
 // TV-App weg (WLAN, Fernseher aus): nach 60 s ohne neue Meldung ausblenden
