@@ -366,16 +366,35 @@ function metadaten(i) {
   md.title = i.title; md.subtitle = i.subtitle; md.images = i.images.map(b => new cast.framework.messages.Image(b.url));
   return md;
 }
+// Fortschritt in Google Home (Rolf 2026-10-23): statt der 10 min des stillen Audios Länge, Position und Pause des Films.
+// Der Abfang schreibt die ausgehende Medien-Meldung um; das stille Audio läuft unverändert weiter. Musik und Ruhe: „Live“.
+function filmPos() {
+  return Math.max(0, Math.min(dauer || Infinity, tv.position + (tv.spielt ? (Date.now() - tv.seit) / 1000 : 0)));
+}
+function statusUmschreiben(st) {
+  if (!st || !istRuhe()) return st;
+  const M = cast.framework.messages, film = tv && dauer > 0;
+  if (st.media) {
+    st.media.streamType = film ? M.StreamType.BUFFERED : M.StreamType.LIVE;
+    st.media.duration = film ? dauer : null;
+  }
+  if (film) {
+    st.currentTime = filmPos();
+    if (st.playerState === S.PLAYING || st.playerState === S.PAUSED) st.playerState = tv.spielt ? S.PLAYING : S.PAUSED;
+  } else if (st.playerState === S.PAUSED) st.playerState = S.PLAYING;
+  return st;
+}
 let infoStand = '';
 function infoAktualisieren() {
-  const i = sitzungsInfo(), stand = JSON.stringify(i);
+  const i = sitzungsInfo(), stand = JSON.stringify(i) + (tv ? `|${dauer}|${tv.spielt}|${tv.seit}` : '');
   if (stand === infoStand) return;
   try {
     ctx.setApplicationState(i.title === 'PLEX+' ? 'PLEX+' : `PLEX+ · ${i.title}`);
     const mi = pm.getMediaInformation();
     if (mi && istRuhe() && pm.getPlayerState() !== S.IDLE) {
       mi.metadata = metadaten(i);
-      pm.setMediaInformation(mi, true);
+      pm.setMediaInformation(mi, false);
+      pm.broadcastStatus(true);
     }
     infoStand = stand;
   } catch (e) { console.warn('Sitzungsinfo:', e); infoStand = stand; }
@@ -440,6 +459,7 @@ function tick() {
   zeichne(pm.getCurrentTimeSec() || 0, pm.getPlayerState() === S.PAUSED, jetzt);
 }
 
+pm.setMessageInterceptor(cast.framework.messages.MessageType.MEDIA_STATUS, statusUmschreiben);
 pm.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, req => {
   if (!(req.media && req.media.customData && req.media.customData.ruhe)) zeigeMedia(req.media);  // stilles Audio der Seite selbst: nichts anzeigen
   return req;
