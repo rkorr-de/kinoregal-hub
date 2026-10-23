@@ -12,6 +12,8 @@
         leere Felder fallen weg, 12 min Stille = aus.
         Kamera-Alarm (TV-App, Nest-Kameras): {"typ":"kamera","titel","art","zeit","bild"} blendet das Bild (nur https oder
         data:) 30 s über alles andere ein, {"typ":"kamera_aus"} nimmt es sofort weg; Film- und Musikanzeige darunter laufen weiter.
+        Ruheseite (PLEX+ läuft, kein Film, keine Musik; alle 5 min): {"typ":"ruhe","ort","temp" (°C, Zahl),"wetter"}
+        zeigt große Uhr, Datum und Wetter; Film und Musik haben Vorrang, "aus" nimmt sie weg, 12 min Stille = aus.
      2. PLEX+ am PC: Medien-LOAD mit stillem Audio so lang wie der Film und Titel, Cover und Dauer in den Metadaten. -->
 <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -82,6 +84,20 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .kam img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .kam .leiste{position:absolute;left:0;right:0;bottom:0;padding:9vh 6vw 6vh;background:linear-gradient(transparent,rgba(0,0,0,.88))}
 .kam .titel{font-size:6.4vh;font-weight:500;line-height:1.1;margin-top:1vh;letter-spacing:-.01em}
+/* Ruheseite (PLEX+ läuft, kein Film, keine Musik): große Uhr, Datum, Wetter */
+.ruhe{display:block;padding:0}
+.ruhe .ruhr{position:absolute;left:0;right:0;top:17vh;text-align:center;font-size:44vh;font-weight:200;letter-spacing:-.04em;line-height:1}
+.ruhe .dp{color:var(--gold);margin:0 -.02em;position:relative;top:-.06em;animation:dp 4s ease-in-out infinite}
+@keyframes dp{0%,100%{opacity:.8}50%{opacity:.35}}
+.ruhe .rglanz{position:absolute;left:50%;top:40vh;width:70vw;height:30vh;transform:translate(-50%,-50%);
+  background:radial-gradient(ellipse,rgba(217,173,85,.07),transparent 70%)}
+.ruhe .rlinie{position:absolute;left:8vw;right:8vw;bottom:22vh;height:1px;
+  background:linear-gradient(90deg,transparent,#2a2926 15%,#2a2926 85%,transparent)}
+.ruhe .runten{position:absolute;left:8vw;right:8vw;bottom:9vh;display:flex;justify-content:space-between;align-items:flex-end}
+.ruhe .rv{font-size:4.4vh;font-weight:400;margin-top:1.2vh;white-space:nowrap}
+.ruhe .rv .dim{color:var(--dim)}
+.ruhe .rwet{text-align:right}
+.ruhe .rwet.leer{visibility:hidden}
 audio{display:none}
 touch-controls{display:none !important}
 </style></head>
@@ -122,6 +138,14 @@ touch-controls{display:none !important}
     </div>
   </div>
 </div>
+<div class="wrap ruhe" id="ru"><div class="rglanz"></div>
+  <div class="ruhr"><span id="rh"></span><span class="dp">:</span><span id="rm"></span></div>
+  <div class="rlinie"></div>
+  <div class="runten">
+    <div><div class="label" id="rtag"></div><div class="rv" id="rdat"></div></div>
+    <div class="rwet leer" id="rwet"><div class="label" id="rort"></div><div class="rv"><span id="rtemp"></span><span class="dim" id="rwtxt"></span></div></div>
+  </div>
+</div>
 <div class="kam" id="k"><img id="ki" alt="">
   <div class="leiste"><div class="label" id="kl"></div><div class="titel" id="kt"></div></div></div>
 <script>
@@ -138,11 +162,14 @@ let dauer = 0, geladen = false;
 let tv = null, endeTimer = 0, senderWegTimer = 0;
 // musik: Musikansicht (Radio/Musik aus der TV-App), {seit, empfangen}
 let musik = null;
+// ruhe: Ruheseite (TV-App meldet {"typ":"ruhe"} alle 5 min, solange PLEX+ ohne Film und Musik läuft), {empfangen}
+let ruhe = null;
 // kam: Kamera-Alarm sichtbar (die Seite gibt den Hub dann nicht frei)
 let kam = false, kamTimer = 0;
 
 function zeigeTitel(titel, untertitel, bild) {
   musikWeg();
+  ruheWeg();
   $('t').textContent = titel || '';
   $('s').textContent = untertitel || '';
   $('w').classList.toggle('ohne-cover', !bild);
@@ -167,7 +194,7 @@ function zeigeMedia(media) {
 // Auch direkt nach dem Start: kommt nie eine Meldung, bleibt die Seite nicht schwarz stehen, sondern gibt nach 1 min frei
 function planeEnde(ms) {
   clearTimeout(endeTimer);
-  endeTimer = setTimeout(() => { if (!tv && !musik && !kam && !geladen && pm.getPlayerState() === S.IDLE) ctx.stop(); }, ms || 3 * 60000);
+  endeTimer = setTimeout(() => { if (!tv && !musik && !ruhe && !kam && !geladen && pm.getPlayerState() === S.IDLE) ctx.stop(); }, ms || 3 * 60000);
 }
 
 function tvAus() {
@@ -175,6 +202,34 @@ function tvAus() {
   geladen = false;
   $('w').classList.remove('da');
   planeEnde();
+}
+
+// Ruheseite: Uhr und Datum rechnet die Seite selbst, Ort/Temperatur/Wetter kommen von der TV-App (fehlen sie, bleibt die Ecke leer)
+function zeigeRuhe(m) {
+  clearTimeout(endeTimer);
+  clearTimeout(senderWegTimer);
+  ruhe = { empfangen: Date.now() };
+  const hatTemp = m.temp != null && m.temp !== '' && isFinite(+m.temp);
+  $('rort').textContent = m.ort || '';
+  $('rtemp').textContent = hatTemp ? Math.round(+m.temp) + '°' : '';
+  $('rwtxt').textContent = m.wetter ? (hatTemp ? ' · ' : '') + m.wetter : '';
+  $('rwet').classList.toggle('leer', !hatTemp && !m.wetter);
+  if (!tv && !musik) zeichneRuhe(new Date());
+}
+
+function ruheWeg() {
+  ruhe = null;
+  $('ru').classList.remove('da');
+}
+
+const TAGE = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+function zeichneRuhe(d) {
+  $('rh').textContent = zwei(d.getHours());
+  $('rm').textContent = zwei(d.getMinutes());
+  $('rtag').textContent = TAGE[d.getDay()];
+  $('rdat').textContent = `${d.getDate()}. ${MONATE[d.getMonth()]}`;
+  $('ru').classList.add('da');
 }
 
 function musikWeg() {
@@ -259,14 +314,15 @@ function kameraWeg() {
   clearTimeout(kamTimer);
   kam = false;
   $('k').classList.remove('da');
-  if (!tv && !musik && !geladen) planeEnde(60000);
+  if (!tv && !musik && !ruhe && !geladen) planeEnde(60000);
 }
 
 function tvNachricht(m) {
   if (m && m.typ === 'kamera') return zeigeKamera(m);
   if (m && m.typ === 'kamera_aus') return kameraWeg();
-  if (!m || m.typ === 'aus') { musikWeg(); return tvAus(); }
-  if (m.typ === 'musik') return zeigeMusik(m);
+  if (!m || m.typ === 'aus') { musikWeg(); ruheWeg(); return tvAus(); }
+  if (m.typ === 'ruhe') return zeigeRuhe(m);
+  if (m.typ === 'musik') { ruheWeg(); return zeigeMusik(m); }
   if (m.typ !== 'zeige') return;
   if (m.typ !== 'zeige') return;
   clearTimeout(endeTimer);
@@ -318,9 +374,14 @@ function ruheSchutz(an) {
 let leerSeit = 0;
 function tick() {
   const jetzt = new Date();
-  ruheSchutz(!!(tv || musik || kam));
+  ruheSchutz(!!(tv || musik || kam || ruhe));
   $('uhr').textContent = uhrzeit(jetzt);
   if ($('muhr').textContent !== uhrzeit(jetzt)) { $('muhr').textContent = uhrzeit(jetzt); uhrBreite(); }
+  if (ruhe && !tv && !musik) {
+    // 12 min ohne Lebenszeichen der TV-App: Ruheseite weg, Hub wird frei
+    if (Date.now() - ruhe.empfangen > 12 * 60000) { ruheWeg(); return tvAus(); }
+    return zeichneRuhe(jetzt);
+  }
   if (musik) {
     // Die TV-App meldet sich bei jeder Änderung und alle 5 min; 12 min Stille = weg
     if (Date.now() - musik.empfangen > 12 * 60000) { musikWeg(); return tvAus(); }
