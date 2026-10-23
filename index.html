@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8">
-<title>PLEX+ Hub</title>
+<title>PLEX+</title>
 <!-- Eigener Cast-Receiver für das "Wohnzimmer Display" (Nest Hub Max). Enthält keine Daten und keine Schlüssel.
      Zwei Wege, gleiche Anzeige:
      1. TV-App (PLEX+ am Fernseher, ohne PC): Nachrichten im Namespace urn:x-cast:de.rkorr.plexplus,
@@ -351,6 +351,36 @@ function zeichne(pos, pause, jetzt) {
 const RUHE = new URL('stille.mp3', location.href).href;
 let ruheLaedt = false, ruhePauseBis = 0;
 const istRuhe = () => { const mi = pm.getMediaInformation && pm.getMediaInformation(); return !!(mi && mi.customData && mi.customData.ruhe); };
+// Was Google Home / das Handy zur Sitzung zeigt (Rolf 2026-10-23): „PLEX+“ und der Titel statt nur „PLEX+ Hub“
+function sitzungsInfo() {
+  const bild = (img, an) => an && img.currentSrc && /^https:/.test(img.currentSrc) ? [{ url: img.currentSrc }] : [];
+  if (tv) return { title: $('t').textContent || 'PLEX+', subtitle: ['PLEX+', $('s').textContent].filter(Boolean).join(' · '),
+    images: bild($('c'), !$('w').classList.contains('ohne-cover')) };
+  if (musik) return { title: $('mt').textContent || $('mkn').textContent || 'PLEX+',
+    subtitle: ['PLEX+', $('mn').textContent, $('mt').textContent ? $('mkn').textContent : ''].filter(Boolean).join(' · '),
+    images: bild($('mi'), $('mc').classList.contains('mit-bild')) };
+  return { title: 'PLEX+', subtitle: kam ? 'Kamera' : 'Bereit', images: [] };
+}
+function metadaten(i) {
+  const md = new cast.framework.messages.GenericMediaMetadata();
+  md.title = i.title; md.subtitle = i.subtitle; md.images = i.images.map(b => new cast.framework.messages.Image(b.url));
+  return md;
+}
+let infoStand = '';
+function infoAktualisieren() {
+  const i = sitzungsInfo(), stand = JSON.stringify(i);
+  if (stand === infoStand) return;
+  try {
+    ctx.setApplicationState(i.title === 'PLEX+' ? 'PLEX+' : `PLEX+ · ${i.title}`);
+    const mi = pm.getMediaInformation();
+    if (mi && istRuhe() && pm.getPlayerState() !== S.IDLE) {
+      mi.metadata = metadaten(i);
+      pm.setMediaInformation(mi, true);
+    }
+    infoStand = stand;
+  } catch (e) { console.warn('Sitzungsinfo:', e); infoStand = stand; }
+}
+
 function ruheSchutz(an) {
   const st = pm.getPlayerState();
   if (!an) {
@@ -365,16 +395,18 @@ function ruheSchutz(an) {
   r.media.contentType = 'audio/mpeg';
   r.media.streamType = M.StreamType.BUFFERED;
   r.media.customData = { ruhe: true };
+  r.media.metadata = metadaten(sitzungsInfo());
   r.autoplay = true;
   ruheLaedt = true;
   Promise.resolve(pm.load(r)).catch(e => { console.warn('Ruhe-Schutz:', e); ruhePauseBis = Date.now() + 30000; })
-    .then(() => { ruheLaedt = false; });
+    .then(() => { ruheLaedt = false; infoStand = ''; });
 }
 
 let leerSeit = 0;
 function tick() {
   const jetzt = new Date();
   ruheSchutz(!!(tv || musik || kam || ruhe));
+  if (tv || musik || kam || ruhe) infoAktualisieren();
   $('uhr').textContent = uhrzeit(jetzt);
   if ($('muhr').textContent !== uhrzeit(jetzt)) { $('muhr').textContent = uhrzeit(jetzt); uhrBreite(); }
   if (ruhe && !tv && !musik) {
