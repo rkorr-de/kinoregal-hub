@@ -9,3 +9,5 @@ Kamera-Alarm: Die TV-App (PLEX+) schickt bei Person oder Bewegung an einer Nest-
 `stille.mp3` (10 min Stille, 8 kbit/s): spielt die Seite selbst, solange sie Film, Musik oder Kamera der TV-App zeigt, damit der Nest Hub keinen Bildschirmschoner darüberlegt.
 
 Ruheseite: `{"typ":"ruhe","ort","temp","wetter"}` (alle 5 min, solange PLEX+ ohne Film und Musik läuft) zeigt große Uhr, Datum und Wetter.
+
+Korraoke: `{"typ":"karaoke",…}` (Format im Kopf von index.html) zeigt Sänger, Lied mit Fortschritt, Warteschlange und QR/Raumcode.

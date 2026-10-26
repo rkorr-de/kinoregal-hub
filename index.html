@@ -14,6 +14,9 @@
         data:) 30 s über alles andere ein, {"typ":"kamera_aus"} nimmt es sofort weg; Film- und Musikanzeige darunter laufen weiter.
         Ruheseite (PLEX+ läuft, kein Film, keine Musik; alle 5 min): {"typ":"ruhe","ort","temp" (°C, Zahl),"wetter"}
         zeigt große Uhr, Datum und Wetter; Film und Musik haben Vorrang, "aus" nimmt sie weg, 12 min Stille = aus.
+        Korraoke (alle 15 s im Lied, sonst alle 60 s): {"typ":"karaoke","titel","interpret","saenger","emoji","dauer","position",
+        "spielt","naechste":[{"titel","interpret","saenger","emoji","dauer"}],"raum","qr" (data:-PNG),"sprache" ("de"/"en")};
+        ohne titel „Als Nächstes“ mit naechste[0]; Vorrang vor der Ruheseite, 2 min Stille = aus.
      2. PLEX+ am PC: Medien-LOAD mit stillem Audio so lang wie der Film und Titel, Cover und Dauer in den Metadaten. -->
 <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -98,6 +101,42 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .ruhe .rv .dim{color:var(--dim)}
 .ruhe .rwet{text-align:right}
 .ruhe .rwet.leer{visibility:hidden}
+/* Korraoke (Karaoke-Abend am TV): wer singt, Lied mit Fortschritt, Warteschlange, QR und Raumcode */
+.kara{display:block;padding:6.5vh 6vw 6vh}
+.kara .kkopf{display:flex;justify-content:space-between;align-items:baseline}
+.kara .kmarke{font-size:3vh;font-weight:600;letter-spacing:.32em;color:var(--gold);text-transform:uppercase}
+.kara .kuhr{font-size:5vh;font-weight:300;letter-spacing:-.01em}
+.kara .kglanz{position:absolute;left:30%;top:42%;width:70vw;height:40vh;transform:translate(-50%,-50%);
+  background:radial-gradient(ellipse,rgba(217,173,85,.08),transparent 70%)}
+.kara .khaupt{position:absolute;left:6vw;top:55%;transform:translateY(-50%);width:54vw}
+.kara .ksaenger{display:flex;align-items:center;gap:2.2vh;margin-top:2.4vh}
+.kara .kemo{width:9vh;height:9vh;border-radius:50%;display:grid;place-items:center;font-size:5.2vh;flex:none;
+  background:radial-gradient(circle at 35% 30%,#3a3020,#15120c);box-shadow:0 0 0 1px rgba(217,173,85,.35),0 0 3vh rgba(217,173,85,.18)}
+.kara .kemo:empty{display:none}
+.kara .kname{font-size:6.4vh;font-weight:400;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kara .ktitel{font-size:8.6vh;font-weight:500;line-height:1.04;letter-spacing:-.02em;margin-top:5vh;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.kara.wartet .ktitel{font-size:7.2vh}
+.kara .kinter{font-size:3.4vh;font-weight:300;margin-top:1.2vh;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kara .bar{margin-top:6vh}
+.kara .kzeit{display:flex;justify-content:space-between;margin-top:1.6vh;font-size:2.6vh}
+.kara .kzeit .dim{color:var(--dim)}
+.kara .kmikro{margin-top:6vh;letter-spacing:.18em}
+.kara.wartet .kspielt,.kara:not(.wartet) .kmikro{display:none}
+.kara .kseite{position:absolute;right:6vw;top:17vh;bottom:6vh;width:26vw;border-left:1px solid #2a2926;padding-left:3.4vw;
+  display:flex;flex-direction:column}
+.kara .kliste{margin-top:2.6vh}
+.kara .keintrag{display:flex;gap:1.6vh;align-items:center;padding:1.7vh 0;border-bottom:1px solid #151412}
+.kara .keintrag .nr{font-size:2.2vh;color:var(--dim);width:2vh;flex:none}
+.kara .keintrag .e{font-size:3.4vh;width:4.4vh;text-align:center;flex:none}
+.kara .keintrag .t{font-size:2.9vh;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kara .keintrag .s{font-size:2.2vh;color:var(--dim);margin-top:.3vh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kara .kqr{margin-top:auto;display:flex;gap:2vh;align-items:center}
+.kara .kqr.leer{display:none}
+.kara .kqr img{width:12vh;height:12vh;border-radius:1vh;image-rendering:pixelated;background:#fff}
+.kara .kqr img[src=""]{display:none}
+.kara .kcode{font-size:3.4vh;font-weight:500;letter-spacing:.12em;margin-top:.6vh}
+.kara .khin{font-size:2.1vh;color:var(--dim);margin-top:.4vh;line-height:1.3}
 audio{display:none}
 touch-controls{display:none !important}
 </style></head>
@@ -146,6 +185,24 @@ touch-controls{display:none !important}
     <div class="rwet leer" id="rwet"><div class="label" id="rort"></div><div class="rv"><span id="rtemp"></span><span class="dim" id="rwtxt"></span></div></div>
   </div>
 </div>
+<div class="wrap kara" id="ka"><div class="kglanz"></div>
+  <div class="kkopf"><div class="kmarke">Korraoke</div><div class="kuhr" id="kuhr"></div></div>
+  <div class="khaupt">
+    <div class="label" id="klab"></div>
+    <div class="ksaenger"><div class="kemo" id="kemo"></div><div class="kname" id="kname"></div></div>
+    <div class="ktitel" id="ktitel"></div>
+    <div class="kinter" id="kinter"></div>
+    <div class="kspielt"><div class="bar"><div class="fill" id="kf"></div><div class="dot" id="kd"></div></div>
+      <div class="kzeit"><span id="kpos"></span><span class="dim" id="krest"></span></div></div>
+    <div class="label kmikro" id="kmikro"></div>
+  </div>
+  <div class="kseite">
+    <div class="label" id="kdanach"></div>
+    <div class="kliste" id="kliste"></div>
+    <div class="kqr" id="kqr"><img id="kqrb" src="" alt=""><div><div class="label" id="kraumlab"></div><div class="kcode" id="kraum"></div>
+      <div class="khin" id="khin"></div></div></div>
+  </div>
+</div>
 <div class="kam" id="k"><img id="ki" alt="">
   <div class="leiste"><div class="label" id="kl"></div><div class="titel" id="kt"></div></div></div>
 <script>
@@ -164,12 +221,15 @@ let tv = null, endeTimer = 0, senderWegTimer = 0;
 let musik = null;
 // ruhe: Ruheseite (TV-App meldet {"typ":"ruhe"} alle 5 min, solange PLEX+ ohne Film und Musik läuft), {empfangen}
 let ruhe = null;
+// kara: Korraoke-Ansicht (TV-App, alle 15 s im Lied, sonst alle 60 s), {empfangen, dauer, position, spielt, seit, wartet}
+let kara = null;
 // kam: Kamera-Alarm sichtbar (die Seite gibt den Hub dann nicht frei)
 let kam = false, kamTimer = 0;
 
 function zeigeTitel(titel, untertitel, bild) {
   musikWeg();
   ruheWeg();
+  karaokeWeg();
   $('t').textContent = titel || '';
   $('s').textContent = untertitel || '';
   $('w').classList.toggle('ohne-cover', !bild);
@@ -194,7 +254,7 @@ function zeigeMedia(media) {
 // Auch direkt nach dem Start: kommt nie eine Meldung, bleibt die Seite nicht schwarz stehen, sondern gibt nach 1 min frei
 function planeEnde(ms) {
   clearTimeout(endeTimer);
-  endeTimer = setTimeout(() => { if (!tv && !musik && !ruhe && !kam && !geladen && pm.getPlayerState() === S.IDLE) ctx.stop(); }, ms || 3 * 60000);
+  endeTimer = setTimeout(() => { if (!tv && !musik && !ruhe && !kara && !kam && !geladen && pm.getPlayerState() === S.IDLE) ctx.stop(); }, ms || 3 * 60000);
 }
 
 function tvAus() {
@@ -202,6 +262,75 @@ function tvAus() {
   geladen = false;
   $('w').classList.remove('da');
   planeEnde();
+}
+
+// Korraoke: {"typ":"karaoke","titel","interpret","saenger","emoji","dauer","position","spielt","naechste":[{titel,interpret,
+// saenger,emoji,dauer}],"raum","qr" (data:-PNG),"sprache" ("de"/"en")}; ohne titel: „Als Nächstes“ mit naechste[0]
+const KTXT = {
+  de: { singt: 'Jetzt singt', pause: 'Pausiert', naechstes: 'Als Nächstes', danach: 'Danach', raum: 'Raum',
+        hin: 'Mit dem Handy<br>Songs wünschen', mikro: 'Mikro bereit machen', noch: 'noch' },
+  en: { singt: 'Now singing', pause: 'Paused', naechstes: 'Up next', danach: 'Next', raum: 'Room',
+        hin: 'Request songs<br>with your phone', mikro: 'Get the mic ready', noch: '' } };
+const mmss = sek => { sek = Math.max(0, Math.round(sek)); return `${Math.floor(sek / 60)}:${zwei(sek % 60)}`; };
+function zeigeKaraoke(m) {
+  clearTimeout(endeTimer);
+  clearTimeout(senderWegTimer);
+  tv = null; geladen = false; musik = null;
+  $('w').classList.remove('da'); $('m').classList.remove('da'); $('ru').classList.remove('da');
+  const t = KTXT[m.sprache === 'en' ? 'en' : 'de'], liste = Array.isArray(m.naechste) ? m.naechste.slice() : [];
+  const wartet = !m.titel, jetzt = wartet ? (liste.shift() || {}) : m;
+  kara = { empfangen: Date.now(), seit: Date.now(), wartet, dauer: +jetzt.dauer || 0, position: +m.position || 0,
+           spielt: m.spielt !== false, t, titel: jetzt.titel || '', saenger: jetzt.saenger || '' };
+  const ka = $('ka');
+  ka.classList.toggle('wartet', wartet);
+  $('klab').textContent = wartet ? t.naechstes : kara.spielt ? t.singt : t.pause;
+  $('kemo').textContent = jetzt.emoji || '';
+  $('kname').textContent = jetzt.saenger || '';
+  $('ktitel').textContent = jetzt.titel || '';
+  $('kinter').textContent = [jetzt.interpret, wartet && +jetzt.dauer > 0 ? mmss(jetzt.dauer) : ''].filter(Boolean).join(' · ');
+  $('kmikro').textContent = t.mikro;
+  $('kdanach').textContent = t.danach;
+  const kl = $('kliste');
+  kl.textContent = '';
+  liste.slice(0, 3).forEach((x, i) => {
+    const e = document.createElement('div'); e.className = 'keintrag';
+    const nr = document.createElement('div'); nr.className = 'nr'; nr.textContent = i + 1;
+    const em = document.createElement('div'); em.className = 'e'; em.textContent = x.emoji || '';
+    const tx = document.createElement('div'); tx.style.minWidth = '0';
+    const ti = document.createElement('div'); ti.className = 't'; ti.textContent = x.titel || '';
+    const sa = document.createElement('div'); sa.className = 's'; sa.textContent = x.saenger || x.interpret || '';
+    tx.append(ti, sa); e.append(nr, em, tx); kl.append(e);
+  });
+  $('kdanach').style.visibility = liste.length ? '' : 'hidden';
+  const qr = /^(data:image\/|https:)/.test(m.qr || '') ? m.qr : '';
+  if ($('kqrb').getAttribute('src') !== qr) $('kqrb').setAttribute('src', qr);
+  $('kraumlab').textContent = t.raum;
+  $('kraum').textContent = m.raum || '';
+  $('khin').innerHTML = t.hin;
+  $('kqr').classList.toggle('leer', !qr && !m.raum);
+  zeichneKaraoke(new Date());
+}
+
+function karaokeWeg() {
+  kara = null;
+  $('ka').classList.remove('da');
+}
+
+function karaPos() {
+  return Math.max(0, Math.min(kara.dauer || Infinity, kara.position + (kara.spielt ? (Date.now() - kara.seit) / 1000 : 0)));
+}
+
+function zeichneKaraoke(jetzt) {
+  $('kuhr').textContent = uhrzeit(jetzt);
+  if (!kara.wartet && kara.dauer) {
+    const pos = karaPos(), pct = pos / kara.dauer * 100;
+    $('kf').style.width = pct + '%';
+    $('kd').style.left = pct + '%';
+    $('kpos').textContent = mmss(pos);
+    $('krest').textContent = [kara.t.noch, mmss(kara.dauer - pos)].filter(Boolean).join(' ');
+  }
+  $('ka').querySelector('.kspielt').style.visibility = kara.dauer ? '' : 'hidden';
+  $('ka').classList.add('da');
 }
 
 // Ruheseite: Uhr und Datum rechnet die Seite selbst, Ort/Temperatur/Wetter kommen von der TV-App (fehlen sie, bleibt die Ecke leer)
@@ -214,7 +343,7 @@ function zeigeRuhe(m) {
   $('rtemp').textContent = hatTemp ? Math.round(+m.temp) + '°' : '';
   $('rwtxt').textContent = m.wetter ? (hatTemp ? ' · ' : '') + m.wetter : '';
   $('rwet').classList.toggle('leer', !hatTemp && !m.wetter);
-  if (!tv && !musik) zeichneRuhe(new Date());
+  if (!tv && !musik && !kara) zeichneRuhe(new Date());
 }
 
 function ruheWeg() {
@@ -314,15 +443,16 @@ function kameraWeg() {
   clearTimeout(kamTimer);
   kam = false;
   $('k').classList.remove('da');
-  if (!tv && !musik && !ruhe && !geladen) planeEnde(60000);
+  if (!tv && !musik && !ruhe && !kara && !geladen) planeEnde(60000);
 }
 
 function tvNachricht(m) {
   if (m && m.typ === 'kamera') return zeigeKamera(m);
   if (m && m.typ === 'kamera_aus') return kameraWeg();
-  if (!m || m.typ === 'aus') { musikWeg(); ruheWeg(); return tvAus(); }
+  if (!m || m.typ === 'aus') { musikWeg(); ruheWeg(); karaokeWeg(); return tvAus(); }
+  if (m.typ === 'karaoke') return zeigeKaraoke(m);
   if (m.typ === 'ruhe') return zeigeRuhe(m);
-  if (m.typ === 'musik') { ruheWeg(); return zeigeMusik(m); }
+  if (m.typ === 'musik') { ruheWeg(); karaokeWeg(); return zeigeMusik(m); }
   if (m.typ !== 'zeige') return;
   if (m.typ !== 'zeige') return;
   clearTimeout(endeTimer);
@@ -354,6 +484,7 @@ const istRuhe = () => { const mi = pm.getMediaInformation && pm.getMediaInformat
 // Was Google Home / das Handy zur Sitzung zeigt (Rolf 2026-10-23): „PLEX+“ und der Titel statt nur „PLEX+ Hub“
 function sitzungsInfo() {
   const bild = (img, an) => an && img.currentSrc && /^https:/.test(img.currentSrc) ? [{ url: img.currentSrc }] : [];
+  if (kara) return { title: kara.titel || 'Korraoke', subtitle: ['PLEX+ · Korraoke', kara.saenger].filter(Boolean).join(' · '), images: [] };
   if (tv) return { title: $('t').textContent || 'PLEX+', subtitle: ['PLEX+', $('s').textContent].filter(Boolean).join(' · '),
     images: bild($('c'), !$('w').classList.contains('ohne-cover')) };
   if (musik) return { title: $('mt').textContent || $('mkn').textContent || 'PLEX+',
@@ -371,22 +502,28 @@ function metadaten(i) {
 function filmPos() {
   return Math.max(0, Math.min(dauer || Infinity, tv.position + (tv.spielt ? (Date.now() - tv.seit) / 1000 : 0)));
 }
+// Fortschritt für Google Home: Film oder laufendes Karaoke-Lied, sonst null (= Live)
+function fortschritt() {
+  if (kara && !kara.wartet && kara.dauer > 0) return { dauer: kara.dauer, pos: karaPos(), spielt: kara.spielt };
+  if (tv && dauer > 0) return { dauer, pos: filmPos(), spielt: tv.spielt };
+  return null;
+}
 function statusUmschreiben(st) {
   if (!st || !istRuhe()) return st;
-  const M = cast.framework.messages, film = tv && dauer > 0;
+  const M = cast.framework.messages, f = fortschritt();
   if (st.media) {
-    st.media.streamType = film ? M.StreamType.BUFFERED : M.StreamType.LIVE;
-    st.media.duration = film ? dauer : null;
+    st.media.streamType = f ? M.StreamType.BUFFERED : M.StreamType.LIVE;
+    st.media.duration = f ? f.dauer : null;
   }
-  if (film) {
-    st.currentTime = filmPos();
-    if (st.playerState === S.PLAYING || st.playerState === S.PAUSED) st.playerState = tv.spielt ? S.PLAYING : S.PAUSED;
+  if (f) {
+    st.currentTime = f.pos;
+    if (st.playerState === S.PLAYING || st.playerState === S.PAUSED) st.playerState = f.spielt ? S.PLAYING : S.PAUSED;
   } else if (st.playerState === S.PAUSED) st.playerState = S.PLAYING;
   return st;
 }
 let infoStand = '';
 function infoAktualisieren() {
-  const i = sitzungsInfo(), stand = JSON.stringify(i) + (tv ? `|${dauer}|${tv.spielt}|${tv.seit}` : '');
+  const i = sitzungsInfo(), stand = JSON.stringify(i) + (tv ? `|${dauer}|${tv.spielt}|${tv.seit}` : '') + (kara ? `|k${kara.dauer}|${kara.spielt}|${kara.seit}` : '');
   if (stand === infoStand) return;
   try {
     ctx.setApplicationState(i.title === 'PLEX+' ? 'PLEX+' : `PLEX+ · ${i.title}`);
@@ -424,10 +561,15 @@ function ruheSchutz(an) {
 let leerSeit = 0;
 function tick() {
   const jetzt = new Date();
-  ruheSchutz(!!(tv || musik || kam || ruhe));
-  if (tv || musik || kam || ruhe) infoAktualisieren();
+  ruheSchutz(!!(tv || musik || kam || ruhe || kara));
+  if (tv || musik || kam || ruhe || kara) infoAktualisieren();
   $('uhr').textContent = uhrzeit(jetzt);
   if ($('muhr').textContent !== uhrzeit(jetzt)) { $('muhr').textContent = uhrzeit(jetzt); uhrBreite(); }
+  if (kara) {
+    // Die TV-App meldet sich im Lied alle 15 s, sonst alle 60 s; 2 min Stille = weg
+    if (Date.now() - kara.empfangen > 2 * 60000) { karaokeWeg(); if (ruhe) return; return tvAus(); }
+    return zeichneKaraoke(jetzt);
+  }
   if (ruhe && !tv && !musik) {
     // 12 min ohne Lebenszeichen der TV-App: Ruheseite weg, Hub wird frei
     if (Date.now() - ruhe.empfangen > 12 * 60000) { ruheWeg(); return tvAus(); }
