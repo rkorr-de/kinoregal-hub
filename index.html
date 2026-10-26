@@ -108,19 +108,26 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .kara .kuhr{font-size:5vh;font-weight:300;letter-spacing:-.01em}
 .kara .kglanz{position:absolute;left:30%;top:42%;width:70vw;height:40vh;transform:translate(-50%,-50%);
   background:radial-gradient(ellipse,rgba(217,173,85,.08),transparent 70%)}
-.kara .khaupt{position:absolute;left:6vw;top:55%;transform:translateY(-50%);width:54vw}
-.kara .ksaenger{display:flex;align-items:center;gap:2.2vh;margin-top:2.4vh}
-.kara .kemo{width:9vh;height:9vh;border-radius:50%;display:grid;place-items:center;font-size:5.2vh;flex:none;
+.kara .khaupt{position:absolute;left:6vw;top:56%;transform:translateY(-50%);width:56vw}
+.kara .ksaenger{display:flex;align-items:center;gap:3.2vh;margin-top:2.6vh}
+.kara .kemo{width:17vh;height:17vh;border-radius:50%;display:grid;place-items:center;font-size:10vh;flex:none;
   background:radial-gradient(circle at 35% 30%,#3a3020,#15120c);box-shadow:0 0 0 1px rgba(217,173,85,.35),0 0 3vh rgba(217,173,85,.18)}
 .kara .kemo:empty{display:none}
-.kara .kname{font-size:6.4vh;font-weight:400;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.kara .ktitel{font-size:8.6vh;font-weight:500;line-height:1.04;letter-spacing:-.02em;margin-top:5vh;
+.kara .kname{font-size:12vh;font-weight:400;line-height:1;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kara .ktitel{font-size:7vh;font-weight:500;line-height:1.08;letter-spacing:-.015em;margin-top:4.5vh;
+  background:linear-gradient(180deg,var(--gold2),var(--gold) 55%,#a87a2c);-webkit-background-clip:text;background-clip:text;color:transparent;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.kara.wartet .ktitel{font-size:7.2vh}
-.kara .kinter{font-size:3.4vh;font-weight:300;margin-top:1.2vh;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.kara .bar{margin-top:6vh}
-.kara .kzeit{display:flex;justify-content:space-between;margin-top:1.6vh;font-size:2.6vh}
-.kara .kzeit .dim{color:var(--dim)}
+.kara.wartet .ktitel{font-size:9.5vh;margin-top:5vh}
+.kara.wartet .kinter{font-size:4.2vh}
+.kara.wartet .kmikro{font-size:2.8vh;margin-top:6vh}
+.kara.wartet .kemo{width:20vh;height:20vh;font-size:12vh}
+.kara.wartet .kname{font-size:14vh}
+.kara .kinter{font-size:3.2vh;font-weight:300;margin-top:1vh;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kara .bar{margin-top:4.5vh}
+.kara .kzeit{display:flex;justify-content:space-between;align-items:flex-end;margin-top:1.8vh}
+.kara .kzeit #kpos{font-size:3vh;color:var(--dim)}
+.kara .krest{text-align:right}
+.kara .krest .v{font-size:15vh;font-weight:300;line-height:.86;letter-spacing:-.03em;margin-top:.8vh}
 .kara .kmikro{margin-top:6vh;letter-spacing:.18em}
 .kara.wartet .kspielt,.kara:not(.wartet) .kmikro{display:none}
 .kara .kseite{position:absolute;right:6vw;top:17vh;bottom:6vh;width:26vw;border-left:1px solid #2a2926;padding-left:3.4vw;
@@ -193,7 +200,7 @@ touch-controls{display:none !important}
     <div class="ktitel" id="ktitel"></div>
     <div class="kinter" id="kinter"></div>
     <div class="kspielt"><div class="bar"><div class="fill" id="kf"></div><div class="dot" id="kd"></div></div>
-      <div class="kzeit"><span id="kpos"></span><span class="dim" id="krest"></span></div></div>
+      <div class="kzeit"><span id="kpos"></span><div class="krest"><div class="label" id="krestlab"></div><div class="v" id="krest"></div></div></div></div>
     <div class="label kmikro" id="kmikro"></div>
   </div>
   <div class="kseite">
@@ -268,9 +275,9 @@ function tvAus() {
 // saenger,emoji,dauer}],"raum","qr" (data:-PNG),"sprache" ("de"/"en")}; ohne titel: „Als Nächstes“ mit naechste[0]
 const KTXT = {
   de: { singt: 'Jetzt singt', pause: 'Pausiert', naechstes: 'Als Nächstes', danach: 'Danach', raum: 'Raum',
-        hin: 'Mit dem Handy<br>Songs wünschen', mikro: 'Mikro bereit machen', noch: 'noch' },
+        hin: 'Mit dem Handy<br>Songs wünschen', mikro: 'Mikro bereit machen', noch: 'Noch' },
   en: { singt: 'Now singing', pause: 'Paused', naechstes: 'Up next', danach: 'Next', raum: 'Room',
-        hin: 'Request songs<br>with your phone', mikro: 'Get the mic ready', noch: '' } };
+        hin: 'Request songs<br>with your phone', mikro: 'Get the mic ready', noch: 'Left' } };
 const mmss = sek => { sek = Math.max(0, Math.round(sek)); return `${Math.floor(sek / 60)}:${zwei(sek % 60)}`; };
 function zeigeKaraoke(m) {
   clearTimeout(endeTimer);
@@ -327,7 +334,8 @@ function zeichneKaraoke(jetzt) {
     $('kf').style.width = pct + '%';
     $('kd').style.left = pct + '%';
     $('kpos').textContent = mmss(pos);
-    $('krest').textContent = [kara.t.noch, mmss(kara.dauer - pos)].filter(Boolean).join(' ');
+    $('krest').textContent = mmss(kara.dauer - pos);
+    $('krestlab').textContent = kara.t.noch;
   }
   $('ka').querySelector('.kspielt').style.visibility = kara.dauer ? '' : 'hidden';
   $('ka').classList.add('da');
