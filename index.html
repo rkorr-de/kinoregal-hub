@@ -39,7 +39,7 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .clock{font-size:26vh;line-height:.82;font-weight:300;letter-spacing:-.035em;margin-left:-.05em}
 .mid{margin-top:auto}
 .label{font-size:1.9vh;font-weight:600;letter-spacing:.24em;color:var(--gold);text-transform:uppercase}
-.title{font-size:5.4vh;font-weight:500;line-height:1.12;margin-top:1.2vh;letter-spacing:-.01em;
+.title{font-size:6.8vh;font-weight:500;line-height:1.1;margin-top:1.2vh;letter-spacing:-.012em;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .sub{font-size:2.6vh;color:var(--dim);margin-top:.9vh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sub:empty{display:none}
@@ -52,6 +52,17 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .v{font-size:10.5vh;font-weight:400;line-height:.9;letter-spacing:-.02em;margin-top:1.2vh}
 .v .u{font-size:3vh;color:var(--dim);margin-left:.6vh;letter-spacing:0}
 .end{text-align:right}
+/* Rolf 2026-11-20: Restzeit doppelt so groß, von weitem lesbar; lange Titel werden kleiner statt abgeschnitten */
+.title.lang{font-size:5.4vh;-webkit-line-clamp:3}
+#r{font-size:21vh;line-height:.84;letter-spacing:-.035em;margin-left:-.04em}
+#r .u{font-size:4vh}
+#w .row{align-items:flex-start;gap:2vh}
+#w .end{padding-top:1.2vh}
+#e{font-size:6vh;white-space:nowrap}
+#e .u{font-size:2.4vh;margin-left:.4vh}
+.pz{display:none;font-size:6.5vh;font-weight:600;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);margin-top:2.4vh;line-height:1}
+.pause #lab{visibility:hidden}
+.pause .pz{display:block}
 .pause .fill{opacity:.55}
 .pause .dot{background:var(--dim);box-shadow:none}
 /* Musik: Cover mit Spiegelung links, Uhr und Titel rechts */
@@ -154,6 +165,7 @@ touch-controls{display:none !important}
   <div class="cover"><div class="glow" id="g"></div><img id="c" alt=""></div>
   <div class="info">
     <div class="clock" id="uhr"></div>
+    <div class="pz">Pause</div>
     <div class="mid">
       <div class="label" id="lab"></div>
       <div class="title" id="t"></div>
@@ -234,11 +246,26 @@ let kara = null;
 // kam: Kamera-Alarm sichtbar (die Seite gibt den Hub dann nicht frei)
 let kam = false, kamTimer = 0;
 
+// Lange Titel: passt der Titel groß nicht in zwei Zeilen, eine Stufe kleiner (erst danach kürzt die Zeilengrenze)
+function titelPassen() {
+  const t = $('t');
+  t.classList.remove('lang');
+  const zeilen = () => {
+    t.style.display = 'block'; t.style.webkitLineClamp = 'unset';
+    const h = t.getBoundingClientRect().height, lh = parseFloat(getComputedStyle(t).lineHeight);
+    t.style.display = ''; t.style.webkitLineClamp = '';
+    return Math.round(h / lh);
+  };
+  if (zeilen() > 2) t.classList.add('lang');
+}
+if (document.fonts) document.fonts.ready.then(() => { if ($('t').textContent) titelPassen(); });
+
 function zeigeTitel(titel, untertitel, bild) {
   musikWeg();
   ruheWeg();
   karaokeWeg();
   $('t').textContent = titel || '';
+  titelPassen();
   $('s').textContent = untertitel || '';
   $('w').classList.toggle('ohne-cover', !bild);
   if (bild && $('c').getAttribute('src') !== bild) {
