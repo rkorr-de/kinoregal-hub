@@ -56,9 +56,10 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .title.lang{font-size:5.4vh;-webkit-line-clamp:3}
 #r{font-size:21vh;line-height:.84;letter-spacing:-.035em;margin-left:-.04em}
 #r .u{font-size:4vh}
+#r.drei{font-size:17.5vh}
 #w .row{align-items:flex-start;gap:2vh}
 #w .end{padding-top:.6vh}
-#e{font-size:8.5vh;white-space:nowrap}
+#e{font-size:11vh;white-space:nowrap}
 #e .u{font-size:2.4vh;margin-left:.4vh}
 .uhrblock{align-self:flex-start}
 .pz{display:none;text-align:center;padding-left:.32em;font-size:10vh;font-weight:600;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);margin-top:2vh;line-height:1}
@@ -509,6 +510,7 @@ function zeichne(pos, pause, jetzt) {
   // Rolf 2026-11-20: Restzeit nur in Minuten, Endzeit ohne „Uhr“
   const rest = Math.max(0, Math.round((dauer - pos) / 60));
   $('r').innerHTML = `${rest}<span class="u">Min.</span>`;
+  $('r').classList.toggle('drei', rest >= 100);  // dreistellig etwas kleiner, damit die große Endzeit daneben passt
   $('e').textContent = uhrzeit(new Date(jetzt.getTime() + rest * 60000));
   $('lab').textContent = pause ? 'Pausiert' : 'Läuft';
   $('w').classList.toggle('pause', pause);
