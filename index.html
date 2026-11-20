@@ -27,7 +27,7 @@
 html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--text);
   font-family:"Google Sans Flex",sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
 .wrap{position:absolute;inset:0;display:grid;grid-template-columns:auto 1fr;gap:5.5vw;padding:7vh 6vw 7.5vh 6vw;
-  opacity:0;transition:opacity 1.2s ease}
+  opacity:0;transition:opacity 1.2s ease,transform 110s linear;transform:translate(var(--dx,0px),var(--dy,0px))}
 .wrap.da{opacity:1}
 .wrap.ohne-cover{grid-template-columns:1fr}
 .ohne-cover .cover{display:none}
@@ -628,6 +628,15 @@ ctx.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, () => 
     if (tv && tv.seit === seit) tvAus();
   }, 60000);
 });
+// Schutz vor Nachbildern (Rolf 2026-11-20): Alle Ansichten wandern sehr langsam um bis zu ±12/±8 px (alle 2 min ein neues
+// Ziel, 110 s Übergang, also etwa 0,1 px pro Sekunde). Beim Hinsehen merkt man nichts, Kanten stehen aber nie lange still.
+let wanderSchritt = 0;
+function wandern() {
+  wanderSchritt++;
+  document.documentElement.style.setProperty('--dx', (12 * Math.sin(wanderSchritt * 0.9)).toFixed(1) + 'px');
+  document.documentElement.style.setProperty('--dy', (8 * Math.sin(wanderSchritt * 1.7 + 1)).toFixed(1) + 'px');
+}
+setInterval(wandern, 2 * 60000);
 setInterval(tick, 1000);
 tick();
 
