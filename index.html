@@ -66,6 +66,7 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .pause #lab{display:none}
 .pause .pz{display:block;animation:puls 2.8s ease-in-out infinite}
 @keyframes puls{0%,100%{opacity:1;text-shadow:0 0 2.4vh rgba(217,173,85,.45)}50%{opacity:.4;text-shadow:none}}
+.ohnezeit .bar,.ohnezeit .row{display:none}
 .pause .fill{opacity:.55}
 .pause .dot{background:var(--dim);box-shadow:none}
 /* Musik: Cover mit Spiegelung links, Uhr und Titel rechts */
@@ -494,11 +495,12 @@ function tvNachricht(m) {
   if (m.typ === 'ruhe') return zeigeRuhe(m);
   if (m.typ === 'musik') { ruheWeg(); karaokeWeg(); return zeigeMusik(m); }
   if (m.typ !== 'zeige') return;
-  if (m.typ !== 'zeige') return;
   clearTimeout(endeTimer);
   clearTimeout(senderWegTimer);
-  tv = { position: +m.position || 0, spielt: !!m.spielt, seit: Date.now() };
+  // quelle (Rolf 2026-11-21): z. B. "Netflix", wenn die TV-App einen Film aus einer fremden App meldet
+  tv = { position: +m.position || 0, spielt: !!m.spielt, seit: Date.now(), quelle: m.quelle || '' };
   dauer = +m.dauer || 0;
+  $('w').classList.toggle('ohnezeit', !dauer);  // ohne Länge (meldet nicht jede App): nur Uhr, Titel und Pause
   zeigeTitel(m.titel, m.untertitel, m.cover || '');
 }
 
@@ -512,7 +514,12 @@ function zeichne(pos, pause, jetzt) {
   $('r').innerHTML = `${rest}<span class="u">Min.</span>`;
   $('r').classList.toggle('drei', rest >= 100);  // dreistellig etwas kleiner, damit die große Endzeit daneben passt
   $('e').textContent = uhrzeit(new Date(jetzt.getTime() + rest * 60000));
-  $('lab').textContent = pause ? 'Pausiert' : 'Läuft';
+  zustandZeigen(pause);
+}
+
+function zustandZeigen(pause) {
+  const q = tv && tv.quelle;
+  $('lab').textContent = pause ? 'Pausiert' : q ? 'Läuft bei ' + q : 'Läuft';
   $('w').classList.toggle('pause', pause);
 }
 
@@ -629,7 +636,7 @@ function tick() {
     const pos = tv.position + (tv.spielt ? still / 1000 : 0);
     if (dauer && tv.spielt && pos > dauer + 60) return tvAus();
     $('w').classList.add('da');
-    if (dauer) zeichne(pos, !tv.spielt, jetzt);
+    if (dauer) zeichne(pos, !tv.spielt, jetzt); else zustandZeigen(!tv.spielt);
     return;
   }
   if (!geladen || !dauer) return;
