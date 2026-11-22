@@ -33,9 +33,11 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .ohne-cover .cover{display:none}
 .logo{display:none;position:absolute;top:8vh;right:6vw;height:24vh;max-width:36vw;object-fit:contain;object-position:right top}
 .ohne-cover.mit-logo .logo{display:block}
-/* mit Cover: Logo unter der Uhr; bei Pause steht dort PAUSE, bei sehr langem Titel fehlt der Platz */
-.logo2{display:none;height:13vh;max-width:100%;object-fit:contain;object-position:center;margin:3vh auto 0}
-.mit-logo:not(.ohne-cover):not(.pause):not(.titel-lang) .logo2{display:block}
+/* mit Cover: Logo rechts neben der Uhr (Rolf 2026-11-22), die Uhr wird dafür etwas kleiner; bei sehr langem Titel kein Logo */
+.info{position:relative}
+.logo2{display:none;position:absolute;right:0;top:1vh;height:16vh;max-width:16vw;object-fit:contain;object-position:right center}
+.mit-logo:not(.ohne-cover):not(.titel-lang) #uhr{font-size:21vh}
+.mit-logo:not(.ohne-cover):not(.titel-lang) .logo2{display:block}
 .ohne-cover .title{font-size:9vh}
 .ohne-cover .title.lang{font-size:6.8vh}
 .cover{position:relative;height:86vh;aspect-ratio:2/3;align-self:center}
@@ -177,8 +179,8 @@ touch-controls{display:none !important}
   <div class="cover"><div class="glow" id="g"></div><img id="c" alt=""></div>
   <div class="info">
     <div class="uhrblock"><div class="clock" id="uhr"></div>
-    <div class="pz">Pause</div>
-    <img class="logo2" id="lg2" alt=""></div>
+    <div class="pz">Pause</div></div>
+    <img class="logo2" id="lg2" alt="">
     <div class="mid">
       <div class="label" id="lab"></div>
       <div class="title" id="t"></div>
@@ -274,11 +276,30 @@ function titelPassen() {
 }
 if (document.fonts) document.fonts.ready.then(() => { if ($('t').textContent) titelPassen(); });
 
+// Logo genau so hoch wie die Ziffern der Uhr, oben und unten bündig (Rolf 2026-11-22)
+function logoAusrichten() {
+  const u = $('uhr'); if (!u.textContent) return;
+  const cs = getComputedStyle(u), ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  const m = ctx.measureText('0123456789'), r = u.getBoundingClientRect();
+  const lh = parseFloat(cs.lineHeight), fa = m.fontBoundingBoxAscent, fd = m.fontBoundingBoxDescent;
+  const grund = r.top + (lh - (fa + fd)) / 2 + fa;          // Grundlinie der Ziffern
+  const oben = grund - m.actualBoundingBoxAscent;
+  for (const l of [$('lg'), $('lg2')]) {
+    const bezug = l.offsetParent; if (!bezug) continue;
+    l.style.top = (oben - bezug.getBoundingClientRect().top) + 'px';
+    l.style.height = (grund - oben) + 'px';
+  }
+}
+window.addEventListener('resize', logoAusrichten);
+if (document.fonts) document.fonts.ready.then(logoAusrichten);
+
 // Senderlogo (Rolf 2026-11-22, waipu.tv): groß oben rechts, nur wenn es kein Cover gibt
 function logoSetzen(url) {
   const w = $('w'), l = $('lg');
   w.classList.toggle('mit-logo', !!url);
-  if (url) for (const b of [l, $('lg2')]) { if (b.getAttribute('src') !== url) b.src = url; b.onerror = () => w.classList.remove('mit-logo'); }
+  requestAnimationFrame(logoAusrichten);
+  if (url) for (const b of [l, $('lg2')]) { if (b.getAttribute('src') !== url) b.src = url; b.onerror = () => w.classList.remove('mit-logo'); b.onload = logoAusrichten; }
 }
 
 function zeigeTitel(titel, untertitel, bild) {
@@ -632,6 +653,7 @@ function tick() {
   ruheSchutz(!!(tv || musik || kam || ruhe || kara));
   if (tv || musik || kam || ruhe || kara) infoAktualisieren();
   $('uhr').textContent = uhrzeit(jetzt);
+  if ($('w').classList.contains('mit-logo')) logoAusrichten();
   if ($('muhr').textContent !== uhrzeit(jetzt)) { $('muhr').textContent = uhrzeit(jetzt); uhrBreite(); }
   if (kara) {
     // Die TV-App meldet sich im Lied alle 15 s, sonst alle 60 s; 2 min Stille = weg
