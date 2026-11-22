@@ -31,6 +31,10 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .wrap.da{opacity:1}
 .wrap.ohne-cover{grid-template-columns:1fr}
 .ohne-cover .cover{display:none}
+.logo{display:none;position:absolute;top:8vh;right:6vw;height:24vh;max-width:36vw;object-fit:contain;object-position:right top}
+.ohne-cover.mit-logo .logo{display:block}
+.ohne-cover .title{font-size:9vh}
+.ohne-cover .title.lang{font-size:6.8vh}
 .cover{position:relative;height:86vh;aspect-ratio:2/3;align-self:center}
 .cover .glow{position:absolute;inset:-6%;background:center/cover;filter:blur(40px) saturate(1.3);opacity:.38;border-radius:20px}
 .cover img{position:relative;width:100%;height:100%;object-fit:cover;border-radius:1.6vh;
@@ -166,6 +170,7 @@ touch-controls{display:none !important}
 <body>
 <audio id="ton"></audio>
 <div class="wrap" id="w">
+  <img class="logo" id="lg" alt="">
   <div class="cover"><div class="glow" id="g"></div><img id="c" alt=""></div>
   <div class="info">
     <div class="uhrblock"><div class="clock" id="uhr"></div>
@@ -264,14 +269,22 @@ function titelPassen() {
 }
 if (document.fonts) document.fonts.ready.then(() => { if ($('t').textContent) titelPassen(); });
 
+// Senderlogo (Rolf 2026-11-22, waipu.tv): groß oben rechts, nur wenn es kein Cover gibt
+function logoSetzen(url) {
+  const w = $('w'), l = $('lg');
+  w.classList.toggle('mit-logo', !!url);
+  if (url) { if (l.getAttribute('src') !== url) l.src = url; l.onerror = () => w.classList.remove('mit-logo'); }
+}
+
 function zeigeTitel(titel, untertitel, bild) {
   musikWeg();
   ruheWeg();
   karaokeWeg();
   $('t').textContent = titel || '';
-  titelPassen();
   $('s').textContent = untertitel || '';
   $('w').classList.toggle('ohne-cover', !bild);
+  logoSetzen('');
+  titelPassen();
   if (bild && $('c').getAttribute('src') !== bild) {
     $('c').src = bild;
     $('g').style.backgroundImage = `url("${bild}")`;
@@ -502,6 +515,7 @@ function tvNachricht(m) {
   dauer = +m.dauer || 0;
   $('w').classList.toggle('ohnezeit', !dauer);  // ohne Länge (meldet nicht jede App): nur Uhr, Titel und Pause
   zeigeTitel(m.titel, m.untertitel, m.cover || '');
+  if (m.logo) logoSetzen(m.logo);
 }
 
 function zeichne(pos, pause, jetzt) {
