@@ -34,7 +34,7 @@ html,body{width:100vw;height:100vh;background:#000;overflow:hidden;color:var(--t
 .logo{display:none;position:absolute;top:8vh;right:6vw;height:24vh;max-width:36vw;object-fit:contain;object-position:right top}
 .ohne-cover.mit-logo .logo{display:block}
 /* mit Cover: Logo unter der Uhr; bei Pause steht dort PAUSE, bei sehr langem Titel fehlt der Platz */
-.logo2{display:none;height:13vh;max-width:100%;object-fit:contain;object-position:left center;margin-top:3vh;align-self:flex-start}
+.logo2{display:none;height:13vh;max-width:100%;object-fit:contain;object-position:center;margin:3vh auto 0}
 .mit-logo:not(.ohne-cover):not(.pause):not(.titel-lang) .logo2{display:block}
 .ohne-cover .title{font-size:9vh}
 .ohne-cover .title.lang{font-size:6.8vh}
@@ -177,8 +177,8 @@ touch-controls{display:none !important}
   <div class="cover"><div class="glow" id="g"></div><img id="c" alt=""></div>
   <div class="info">
     <div class="uhrblock"><div class="clock" id="uhr"></div>
-    <div class="pz">Pause</div></div>
-    <img class="logo2" id="lg2" alt="">
+    <div class="pz">Pause</div>
+    <img class="logo2" id="lg2" alt=""></div>
     <div class="mid">
       <div class="label" id="lab"></div>
       <div class="title" id="t"></div>
