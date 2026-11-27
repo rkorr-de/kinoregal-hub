@@ -633,6 +633,13 @@ function ruheSchutz(an) {
     return;
   }
   if (st === S.PAUSED && istRuhe()) return pm.play();  // z. B. per Touch/Sprache angehalten: stilles Audio läuft weiter
+  // Schleife ohne neues LOAD (Rolf 2026-11-27): Seit Hub-Firmware 1.56 blendet jedes neue LOAD kurz die Mediensteuerung
+  // ein, danach legt der Hub seine Uhr über die Seite. Darum kurz vor dem Ende zurückspulen statt nach dem Ende neu zu laden.
+  if (st === S.PLAYING && istRuhe()) {
+    const d = pm.getDurationSec ? pm.getDurationSec() : 0, t = pm.getCurrentTimeSec();
+    if (d > 60 && t > d - 45) { console.info('Ruhe-Schutz: zurück auf Anfang', Math.round(t)); pm.seek(1); }
+    return;
+  }
   if (st !== S.IDLE || ruheLaedt || Date.now() < ruhePauseBis) return;
   const M = cast.framework.messages, r = new M.LoadRequestData();
   r.media = new M.MediaInformation();
@@ -643,6 +650,7 @@ function ruheSchutz(an) {
   r.media.metadata = metadaten(sitzungsInfo());
   r.autoplay = true;
   ruheLaedt = true;
+  console.info('Ruhe-Schutz: LOAD stille.mp3', new Date().toLocaleTimeString());
   Promise.resolve(pm.load(r)).catch(e => { console.warn('Ruhe-Schutz:', e); ruhePauseBis = Date.now() + 30000; })
     .then(() => { ruheLaedt = false; infoStand = ''; });
 }
@@ -720,6 +728,7 @@ setInterval(wandern, 2 * 60000);
 setInterval(tick, 1000);
 tick();
 
+document.addEventListener('visibilitychange', () => console.info('Sichtbarkeit:', document.visibilityState, new Date().toLocaleTimeString()));
 const opt = new cast.framework.CastReceiverOptions();
 opt.disableIdleTimeout = true;      // Anzeige bleibt, solange der Film läuft; PLEX+ beendet sie selbst
 opt.customNamespaces = { [NS]: cast.framework.system.MessageType.JSON };
